@@ -26,7 +26,7 @@ import commentRouter from "./routes/comment.routes.js";
 import notificationRouter from "./routes/notification.routes.js";
 import packageRouter from "./routes/package.routes.js";
 import bookingRouter from "./routes/booking.routes.js";
-import staticRouter from "./controllers/static.js";
+import staticRouter from "./static.js";
 
 //routes declaration
 app.use("/api/v1/traveler", travelerRouter);

@@ -6,7 +6,7 @@ import {
     deleteBooking 
 } from "../controllers/booking.controller.js";
 import { verifyAgencyJWT } from "../middlewares/agencyAuth.middleware.js"
-import { verifyJWT } from "../middlewares/Auth.middleware.js"
+import { verifyJWT } from "../middlewares/auth.middleware.js"
 import { verifyUser } from "../middlewares/verifyUser.middleware.js";
 
 
