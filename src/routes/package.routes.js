@@ -1,51 +1,33 @@
 import { Router } from "express";
 import {
-    ensureAgency,
-    createPackage,
-    updatePackage,
-    deletePackage,
-    getPackage,
-    getPackages,
+  getAllPackages,
+  getPackages,
+  getPackage,
+  createPackage,
+  updatePackage,
+  deletePackage,
 } from "../controllers/package.controller.js";
 import { verifyAgencyJWT } from "../middlewares/agencyAuth.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
-// Route to create a new package
-router.route(
-    "/createpackage").post(
-    verifyAgencyJWT,
-    ensureAgency,
-    upload.fields([
-        {
-            name: "photos",
-            maxCount: 4, // Maximum of 4 photos allowed
-        },
-    ]),
-    createPackage
-);
+// Public routes
+router.get("/all", getAllPackages);
+router.get("/detail/:packageId", getPackage);
 
-// Route to update an existing package
-router.route(
-    "/update/:packageId").patch(
-    verifyAgencyJWT,
-    upload.fields([
-        {
-            name: "photos",
-            maxCount: 4, // Maximum of 4 photos allowed
-        },
-    ]),
-    updatePackage
-);
+// Protected agency routes
+router.use(verifyAgencyJWT);
 
-// Route to delete a package
-router.route("/delete/:packageId").delete(verifyAgencyJWT, deletePackage);
+// Package management for agencies
+router
+  .route("/")
+  .get(getPackages)
+  .post(upload.fields([{ name: "photos", maxCount: 4 }]), createPackage);
 
-// Route to get a specific package by ID
-router.route("/:packageId").get(verifyAgencyJWT, getPackage);
-
-// Route to get all packages with optional filters
-router.route("/allpackages").get(verifyAgencyJWT, getPackages);
+router
+  .route("/:packageId")
+  .put(upload.fields([{ name: "photos", maxCount: 4 }]), updatePackage)
+  .delete(deletePackage);
 
 export default router;
