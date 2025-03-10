@@ -1,10 +1,25 @@
 import multer from "multer";
-
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 // Configure Multer disk storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "./public/temp"); // Ensure this directory exists
+    // Use environment-specific path: OS temp directory for Vercel, public/temp for local
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+    
+    if (isProduction) {
+      // For Vercel: use the OS temp directory
+      const tempDir = path.join(os.tmpdir(), 'app-uploads');
+      fs.mkdirSync(tempDir, { recursive: true });
+      cb(null, tempDir);
+    } else {
+      // For local: use the public/temp directory as before
+      const localDir = "./public/temp";
+      fs.mkdirSync(localDir, { recursive: true });
+      cb(null, localDir);
+    }
   },
   filename: function (req, file, cb) {
     const ext = file.mimetype.split("/")[1]; // Get file extension
@@ -12,7 +27,6 @@ const storage = multer.diskStorage({
     cb(null, uniqueName);
   },
 });
-
 
 // Define allowed file MIME types (Images and Videos)
 const allowedFileTypes = [
@@ -25,7 +39,6 @@ const allowedFileTypes = [
   "video/mpeg",   // MPEG4 video
   "video/quicktime", // MOV video
 ];
-
 
 export const upload = multer({
   storage,
