@@ -1,33 +1,33 @@
-import { Router } from "express";
-import {
-  getAllPackages,
-  getPackages,
-  getPackage,
-  createPackage,
-  updatePackage,
-  deletePackage,
-} from "../controllers/package.controller.js";
-import { verifyAgencyJWT } from "../middlewares/agencyAuth.middleware.js";
+import express from "express";
 import { upload } from "../middlewares/multer.middleware.js";
+import { verifyAgencyJWT } from "../middlewares/agencyAuth.middleware.js";
+import {
+    getAllPackages,
+    getPackageById,
+    createPackage,
+    updatePackage,
+    deletePackage,
+} from "../controllers/package.controller.js";
 
-const router = Router();
+const router = express.Router();
 
 // Public routes
-router.get("/all", getAllPackages);
-router.get("/detail/:packageId", getPackage);
+router.get("/", getAllPackages);
+router.get("/:packageId", getPackageById);
 
-// Protected agency routes
-router.use(verifyAgencyJWT);
-
-// Package management for agencies
-router
-  .route("/")
-  .get(getPackages)
-  .post(upload.fields([{ name: "photos", maxCount: 4 }]), createPackage);
-
-router
-  .route("/:packageId")
-  .put(upload.fields([{ name: "photos", maxCount: 4 }]), updatePackage)
-  .delete(deletePackage);
+// Agency-protected routes
+router.post(
+    "/create",
+    verifyAgencyJWT,
+    upload.array("photos", 4),
+    createPackage
+);
+router.put(
+    "/update/:packageId",
+    verifyAgencyJWT,
+    upload.array("photos", 4),
+    updatePackage
+);
+router.delete("/delete/:packageId", verifyAgencyJWT, deletePackage);
 
 export default router;

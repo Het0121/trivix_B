@@ -10,7 +10,7 @@ const packageSchema = new Schema(
         agency: {
             type: Schema.Types.ObjectId,
             ref: "Agency",
-            required: true
+            required: true,
         },
         mainLocation: {
             type: String,
@@ -59,10 +59,7 @@ const packageSchema = new Schema(
         ],
         photos: {
             type: [String],
-            validate: {
-                validator: (val) => val.length <= 4,
-                message: "{PATH} exceeds the limit of 4",
-            },
+            required: true,
         },
         price: {
             type: Number,
@@ -76,12 +73,7 @@ const packageSchema = new Schema(
         availableSlots: {
             type: Number,
             required: true,
-            validate: {
-                validator: function (value) {
-                    return value >= 0 && value <= this.maxSlots;
-                },
-                message: "Available slots must be between 0 and max slots.",
-            },
+            min: 0,
         },
         isActive: {
             type: Boolean,
