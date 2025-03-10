@@ -36,10 +36,8 @@ const getPackageById = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, travelPackage, "Package retrieved successfully"));
 });
 
-
 // Create packages
 const createPackage = asyncHandler(async (req, res) => {
-    
     const agencyId = req.agency?._id;
     if (!agencyId) {
         throw new ApiError(401, "Agency authentication required");
@@ -55,30 +53,31 @@ const createPackage = asyncHandler(async (req, res) => {
         description,
         servicesAndFacilities = [],
         activities = [],
-        itinerary = [],
         price,
         maxSlots,
         availableSlots,
     } = req.body;
 
-    // Ensure array fields are properly parsed
-    const parsedServices = Array.isArray(servicesAndFacilities) 
-        ? servicesAndFacilities 
-        : typeof servicesAndFacilities === "string"
-        ? servicesAndFacilities.split(",").map((s) => s.trim())
-        : [];
+    // Parse JSON string fields from form-data
+    const parsedServices = typeof servicesAndFacilities === "string" 
+        ? servicesAndFacilities.split(",").map((s) => s.trim()) 
+        : servicesAndFacilities;
 
-    const parsedActivities = Array.isArray(activities) 
-        ? activities 
-        : typeof activities === "string"
-        ? activities.split(",").map((s) => s.trim())
-        : [];
+    const parsedActivities = typeof activities === "string" 
+        ? activities.split(",").map((s) => s.trim()) 
+        : activities;
 
-    const parsedItinerary = Array.isArray(itinerary) 
-        ? itinerary 
-        : typeof itinerary === "string"
-        ? itinerary.split(",").map((s) => s.trim())
-        : [];
+    let parsedItinerary = [];
+    if (req.body.itinerary) {
+        try {
+            parsedItinerary = JSON.parse(req.body.itinerary);
+            if (!Array.isArray(parsedItinerary)) {
+                throw new Error();
+            }
+        } catch (error) {
+            throw new ApiError(400, "Invalid itinerary format. It should be a valid JSON array.");
+        }
+    }
 
     const files = req.files || [];
     let photoUrls = [];
@@ -105,7 +104,7 @@ const createPackage = asyncHandler(async (req, res) => {
         description,
         servicesAndFacilities: parsedServices,
         activities: parsedActivities,
-        itinerary: parsedItinerary,
+        itinerary: parsedItinerary, // Now properly parsed
         photos: photoUrls,
         price,
         maxSlots,
@@ -114,6 +113,7 @@ const createPackage = asyncHandler(async (req, res) => {
 
     return res.status(201).json(new ApiResponse(201, newPackage, "Package created successfully"));
 });
+
 
 
 // Update package
