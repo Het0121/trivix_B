@@ -36,8 +36,10 @@ const getPackageById = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, travelPackage, "Package retrieved successfully"));
 });
 
-// Create a package
+
+// Create packages
 const createPackage = asyncHandler(async (req, res) => {
+    
     const agencyId = req.agency?._id;
     if (!agencyId) {
         throw new ApiError(401, "Agency authentication required");
@@ -51,31 +53,41 @@ const createPackage = asyncHandler(async (req, res) => {
         startDate,
         endDate,
         description,
-        servicesAndFacilities,
-        activities,
-        itinerary,
+        servicesAndFacilities = [],
+        activities = [],
+        itinerary = [],
         price,
         maxSlots,
         availableSlots,
     } = req.body;
 
-    // Parse array fields if they come as strings
-    const parsedServices = servicesAndFacilities
-        ? JSON.parse(servicesAndFacilities)
+    // Ensure array fields are properly parsed
+    const parsedServices = Array.isArray(servicesAndFacilities) 
+        ? servicesAndFacilities 
+        : typeof servicesAndFacilities === "string"
+        ? servicesAndFacilities.split(",").map((s) => s.trim())
         : [];
-    const parsedActivities = activities ? JSON.parse(activities) : [];
-    const parsedItinerary = itinerary ? JSON.parse(itinerary) : [];
 
-    const files = req.files;
+    const parsedActivities = Array.isArray(activities) 
+        ? activities 
+        : typeof activities === "string"
+        ? activities.split(",").map((s) => s.trim())
+        : [];
+
+    const parsedItinerary = Array.isArray(itinerary) 
+        ? itinerary 
+        : typeof itinerary === "string"
+        ? itinerary.split(",").map((s) => s.trim())
+        : [];
+
+    const files = req.files || [];
     let photoUrls = [];
 
-    console.log("Uploaded files:", files); // Debug log
-
-    if (files && files.length > 0) {
-        const uploadPromises = files.map((file) => uploadOnCloudinary(file.path));
-        const uploadResults = await Promise.all(uploadPromises);
-        console.log("Cloudinary upload results:", uploadResults); // Debug log
-        photoUrls = uploadResults.map((result) => result?.url).filter((url) => url);
+    if (files.length > 0) {
+        const uploadResults = await Promise.all(
+            files.map((file) => uploadOnCloudinary(file.path))
+        );
+        photoUrls = uploadResults.map((result) => result?.url).filter(Boolean);
     }
 
     if (photoUrls.length === 0) {
@@ -100,10 +112,9 @@ const createPackage = asyncHandler(async (req, res) => {
         availableSlots: availableSlots || maxSlots,
     });
 
-    return res
-        .status(201)
-        .json(new ApiResponse(201, newPackage, "Package created successfully"));
+    return res.status(201).json(new ApiResponse(201, newPackage, "Package created successfully"));
 });
+
 
 // Update package
 const updatePackage = asyncHandler(async (req, res) => {
