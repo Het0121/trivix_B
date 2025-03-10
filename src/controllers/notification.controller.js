@@ -77,6 +77,7 @@ const deleteNotification = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(200, null, 'Notification deleted successfully.'));
 });
 
+
 export {
     createNotification,
     getNotifications,

@@ -5,6 +5,7 @@ import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 
+
 // Generate Access And Refresh Token
 const generateAccessAndRefreshTokens = async (agencyId) => {
   try {
@@ -25,47 +26,67 @@ const generateAccessAndRefreshTokens = async (agencyId) => {
   }
 };
 
+
 // Register Agency
 const registerAgency = asyncHandler(async (req, res) => {
   const { agencyName, userName, email, agencyPhoneNo, password } = req.body;
 
   // Validate required fields
   if ([agencyName, userName, email, agencyPhoneNo, password].some((field) => !field?.trim())) {
-    throw new ApiError(400, "All fields are required");
+      throw new ApiError(400, "All fields are required");
   }
 
   // Check if agency already exists
   const existedAgency = await Agency.findOne({
-    $or: [
-      { userName: userName.toLowerCase() }, 
-      { agencyPhoneNo }, 
-      { email: email.toLowerCase() }
-    ]
+      $or: [
+          { userName: userName.toLowerCase() },
+          { agencyPhoneNo },
+          { email: email.toLowerCase() },
+      ],
   });
 
   if (existedAgency) {
-    throw new ApiError(409, "Agency with Phone No, username, or Email already exists");
+      throw new ApiError(409, "Agency with Phone No, username, or Email already exists");
   }
 
   // Create new agency
   const agency = await Agency.create({
-    agencyName,
-    userName: userName.toLowerCase(),
-    email: email.toLowerCase(),
-    agencyPhoneNo,
-    password
+      agencyName,
+      userName: userName.toLowerCase(),
+      email: email.toLowerCase(),
+      agencyPhoneNo,
+      password,
   });
+
+  // Generate tokens
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(agency._id);
 
   const createdAgency = await Agency.findById(agency._id).select("-password -refreshToken");
 
   if (!createdAgency) {
-    throw new ApiError(500, "Something went wrong while registering the Agency");
+      throw new ApiError(500, "Something went wrong while registering the Agency");
   }
 
-  return res.status(201).json(
-    new ApiResponse(200, createdAgency, "Agency registered Successfully")
-  );
+  // Cookie options
+  const options = {
+      httpOnly: true,
+      secure: true,
+  };
+
+  return res
+      .status(201)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", refreshToken, options)
+      .cookie("userType", "Agency", options)
+      .json(
+          new ApiResponse(
+              201,
+              { agency: createdAgency, accessToken, refreshToken },
+              "Agency registered Successfully"
+          )
+      );
 });
+
 
 // Login Agency
 const loginAgency = asyncHandler(async (req, res) => {
@@ -73,28 +94,28 @@ const loginAgency = asyncHandler(async (req, res) => {
 
   // Validate at least one identifier is provided
   if (!userName && !agencyPhoneNo) {
-    throw new ApiError(400, "Username or phone number is required");
+      throw new ApiError(400, "Username or phone number is required");
   }
 
   // Validate password is provided
   if (!password) {
-    throw new ApiError(400, "Password is required");
+      throw new ApiError(400, "Password is required");
   }
 
   // Find agency by username or phone number
   const agency = await Agency.findOne({
-    $or: [{ userName }, { agencyPhoneNo }]
+      $or: [{ userName }, { agencyPhoneNo }],
   });
 
   if (!agency) {
-    throw new ApiError(404, "Agency does not exist");
+      throw new ApiError(404, "Agency does not exist");
   }
 
   // Validate password
   const isPasswordValid = await agency.isPasswordCorrect(password);
 
   if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid Agency Password");
+      throw new ApiError(401, "Invalid Agency Password");
   }
 
   // Generate tokens
@@ -106,25 +127,26 @@ const loginAgency = asyncHandler(async (req, res) => {
 
   const loggedInAgency = await Agency.findById(agency._id).select("-password -refreshToken");
 
+  // Cookie options
   const options = {
-    httpOnly: true,
-    secure: true
+      httpOnly: true,
+      secure: true,
   };
 
   return res
-    .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
-    .json(
-      new ApiResponse(
-        200,
-        {
-          agency: loggedInAgency, accessToken, refreshToken
-        },
-        "Agency logged In Successfully"
-      )
-    );
+      .status(200)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", refreshToken, options)
+      .cookie("userType", "Agency", options)
+      .json(
+          new ApiResponse(
+              200,
+              { agency: loggedInAgency, accessToken, refreshToken },
+              "Agency logged In Successfully"
+          )
+      );
 });
+
 
 // Logout Agency
 const logoutAgency = asyncHandler(async (req, res) => {
@@ -151,6 +173,7 @@ const logoutAgency = asyncHandler(async (req, res) => {
     .clearCookie("refreshToken", options)
     .json(new ApiResponse(200, {}, "Agency logged Out"));
 });
+
 
 // Refresh Access Token
 const refreshAccessToken = asyncHandler(async (req, res) => {
@@ -199,6 +222,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 });
 
+
 // Change Agency Password
 const changePassword = asyncHandler(async (req, res) => {
   const { oldPassword, newPassword, confirmNewPassword } = req.body;
@@ -239,6 +263,7 @@ const changePassword = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Password changed successfully"));
 });
 
+
 // Get Agency Profile
 const currentAgencyProfile = asyncHandler(async (req, res) => {
   return res
@@ -249,6 +274,7 @@ const currentAgencyProfile = asyncHandler(async (req, res) => {
       "Agency fetched successfully"
     ));
 });
+
 
 // Update Agency Profile Details
 const updateProfileDetails = asyncHandler(async (req, res) => {
@@ -321,6 +347,7 @@ const updateProfileDetails = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, agency, "Profile updated successfully"));
 });
 
+
 // Helper function to extract public ID from Cloudinary URL
 const extractCloudinaryPublicId = (url) => {
   if (!url || url === "defaultImg.jpg") {
@@ -338,6 +365,7 @@ const extractCloudinaryPublicId = (url) => {
     return null;
   }
 };
+
 
 // Upload & Update Avatar
 const updateAvatar = asyncHandler(async (req, res) => {
@@ -387,6 +415,7 @@ const updateAvatar = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, updatedAgency, "Avatar updated successfully"));
 });
 
+
 // Delete Avatar
 const deleteAvatar = asyncHandler(async (req, res) => {
   // Fetch the Agency data
@@ -426,6 +455,7 @@ const deleteAvatar = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while deleting avatar: " + (error.message || "Unknown error"));
   }
 });
+
 
 // Update Cover Image
 const updateCoverImage = asyncHandler(async (req, res) => {
@@ -475,6 +505,7 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, updatedAgency, "Cover image updated successfully"));
 });
 
+
 // Delete Cover Image
 const deleteCoverImage = asyncHandler(async (req, res) => {
   // Fetch the agency data
@@ -514,6 +545,7 @@ const deleteCoverImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while deleting cover image: " + (error.message || "Unknown error"));
   }
 });
+
 
 export {
   registerAgency,

@@ -81,7 +81,7 @@ const getPostById = asyncHandler(async (req, res) => {
     }
 
     try {
-        // Aggregation pipeline to fetch the post with owner details
+        // fetch the post with owner details
         const post = await Post.aggregate([
             // Match the post by ID
             { $match: { _id: new mongoose.Types.ObjectId(postId) } },
@@ -123,8 +123,8 @@ const getPostById = asyncHandler(async (req, res) => {
             {
                 $project: {
                     _id: 1, // Include post ID
-                    title: 1, // Example field: include post title (replace with actual field names)
-                    content: 1, // Example field: include post content (replace with actual field names)
+                    title: 1, 
+                    content: 1, 
                     ownerDetails: {
                         fullName: 1,
                         userName: 1,
@@ -183,11 +183,11 @@ const publishAPost = asyncHandler(async (req, res) => {
             userType: req.userType, // 'Traveler' or 'Agency'
             userId: req.user._id,
         },
-        image: imageUploadResponse?.secure_url || null, // Use the image URL if provided
-        video: videoUploadResponse?.secure_url || null, // Use the video URL if provided
-        thumbnail: videoUploadResponse?.secure_url || null, // Use video thumbnail if video is uploaded
-        caption: caption || null, // Optional caption
-        location: location || null, // Optional location
+        image: imageUploadResponse?.secure_url || null, 
+        video: videoUploadResponse?.secure_url || null, 
+        thumbnail: videoUploadResponse?.secure_url || null, 
+        caption: caption || null, 
+        location: location || null, 
         views: 0, // Initialize views counter
         isPublished: true,
     });
@@ -248,7 +248,6 @@ const deletePost = asyncHandler(async (req, res) => {
     // Find the post by its ID
     const post = await Post.findById(postId);
 
-    // If post doesn't exist, throw an error
     if (!post) {
         throw new ApiError(404, "Post not found");
     }
@@ -273,7 +272,7 @@ const deletePost = asyncHandler(async (req, res) => {
         await Promise.all(deletionPromises);
 
         // Now delete the post from the database
-        await Post.findByIdAndDelete(postId);  // This is the correct way to delete a post by its ID
+        await Post.findByIdAndDelete(postId); 
 
     } catch (error) {
         // Catch any error that occurs during the media deletion process

@@ -74,6 +74,10 @@ const travelerSchema = new mongoose.Schema(
                 ref: 'Post'
             }
         ],
+        lastLogin: {
+            type: Date,
+            default: "",
+        },
         refreshToken: {
             type: String
         }

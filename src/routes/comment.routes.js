@@ -11,7 +11,6 @@ import { verifyUser } from "../middlewares/verifyUser.middleware.js"
 
 const router = Router();
 
-
 // Get comments for a specific post
 router.route('/:postId').get(verifyUser, getPostComments);
 

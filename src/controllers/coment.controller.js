@@ -1,10 +1,11 @@
 import mongoose, { isValidObjectId } from "mongoose";
 import { Comment } from "../models/comment.model.js";
-import { Post } from "../models/post.model.js"; // Assuming you have a Post model
+import { Post } from "../models/post.model.js"; 
 import { Notification } from "../models/notification.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+
 
 // Get all comments for a specific post
 const getPostComments = asyncHandler(async (req, res) => {
@@ -57,6 +58,7 @@ const getPostComments = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(comments, totalComments, page, limit));
 });
 
+
 // Add a comment to a post
 const addComment = asyncHandler(async (req, res) => {
     const { content } = req.body;
@@ -80,7 +82,7 @@ const addComment = asyncHandler(async (req, res) => {
 
     // Notify the post owner if the commenter is not the owner
     if (post.owner.userId.toString() !== req.user._id.toString()) {
-        const senderName = req.user.userName || "User"; // Assuming userName is available in req.user
+        const senderName = req.user.userName || "User"; 
         const notificationMessage = `${senderName} commented on your post.`;
 
         await Notification.create({
@@ -95,6 +97,7 @@ const addComment = asyncHandler(async (req, res) => {
 
     res.status(201).json(new ApiResponse(newComment, "Comment added successfully."));
 });
+
 
 // Update a comment
 const updateComment = asyncHandler(async (req, res) => {
@@ -116,6 +119,7 @@ const updateComment = asyncHandler(async (req, res) => {
     res.status(200).json(new ApiResponse(comment, "Comment updated successfully."));
 });
 
+
 // Delete a comment
 const deleteComment = asyncHandler(async (req, res) => {
     const { commentId } = req.params;
@@ -131,6 +135,7 @@ const deleteComment = asyncHandler(async (req, res) => {
 
     res.status(200).json(new ApiResponse(null, "Comment deleted successfully."));
 });
+
 
 export {
     getPostComments,

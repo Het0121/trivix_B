@@ -330,6 +330,7 @@ const getTrendingTweets = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, trendingTweets, "Trending tweets fetched successfully"));
 });
 
+
 export {
   createTweet,
   getUserTweets,

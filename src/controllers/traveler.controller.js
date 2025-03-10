@@ -1,123 +1,156 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiError } from "../utils/ApiError.js"
-import { Traveler } from "../models/traveler.model.js"
+import { ApiError } from "../utils/ApiError.js";
+import { Traveler } from "../models/traveler.model.js";
 import { Agency } from "../models/agency.model.js";
 import { FollowerFollowing } from "../models/follow.model.js";
-import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js"
+import {
+  uploadOnCloudinary,
+  deleteFromCloudinary,
+} from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 
 // Generate Access And Refresh Token
 const generateAccessAndRefreshTokens = async (travelerId) => {
   try {
-    const traveler = await Traveler.findById(travelerId)
-    const accessToken = traveler.generateAccessToken()
-    const refreshToken = traveler.generateRefreshToken()
+    const traveler = await Traveler.findById(travelerId);
+    const accessToken = traveler.generateAccessToken();
+    const refreshToken = traveler.generateRefreshToken();
 
-    traveler.refreshToken = refreshToken
-    await traveler.save({ validateBeforeSave: false })
+    traveler.refreshToken = refreshToken;
+    await traveler.save({ validateBeforeSave: false });
 
-    return { accessToken, refreshToken }
-
-
+    return { accessToken, refreshToken };
   } catch (error) {
-    throw new ApiError(500, "Something went wrong while generating refresh and access token")
+    throw new ApiError(
+      500,
+      "Something went wrong while generating refresh and access token"
+    );
   }
-}
-
+};
 
 // Register Traveler
 const registerTraveler = asyncHandler(async (req, res) => {
-
-  const { fullName, userName, email, phoneNo, password } = req.body
+  const { fullName, userName, email, phoneNo, password } = req.body;
 
   if (
-    [fullName, userName, email, phoneNo, password].some((field) => field?.trim() === "")
+    [fullName, userName, email, phoneNo, password].some(
+      (field) => field?.trim() === ""
+    )
   ) {
-    throw new ApiError(400, "All fields are required")
+    throw new ApiError(400, "All fields are required");
   }
 
   const existedTraveler = await Traveler.findOne({
-    $or: [{ userName }, { phoneNo }, { email }]
-  })
+    $or: [{ userName }, { phoneNo }, { email }],
+  });
 
   if (existedTraveler) {
-    throw new ApiError(409, "Traveler with Phone No or username or Email already exists")
+    throw new ApiError(
+      409,
+      "Traveler with Phone No or username or Email already exists"
+    );
   }
-
 
   const traveler = await Traveler.create({
     fullName,
     email: email.toLowerCase(),
     userName: userName.toLowerCase(),
     phoneNo,
-    password
-  })
+    password,
+  });
+
+  // Generate tokens
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    traveler._id
+  );
 
   const createdTraveler = await Traveler.findById(traveler._id).select(
     "-password -refreshToken"
-  )
+  );
 
   if (!createdTraveler) {
-    throw new ApiError(500, "Something went wrong while registering the Traveler")
+    throw new ApiError(
+      500,
+      "Something went wrong while registering the Traveler"
+    );
   }
 
-  return res.status(201).json(
-    new ApiResponse(200, createdTraveler, "Traveler registered Successfully")
-  )
+  // Cookie options
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
 
-})
-
+  return res
+    .status(201)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .cookie("userType", "Traveler", options)
+    .json(
+      new ApiResponse(
+        201,
+        { traveler: createdTraveler, accessToken, refreshToken },
+        "Traveler registered Successfully"
+      )
+    );
+});
 
 // Login Traveler
 const loginTraveler = asyncHandler(async (req, res) => {
-
-  const { userName, phoneNo, password } = req.body
+  const { userName, phoneNo, password } = req.body;
   // console.log(userName, phoneNo, password);
 
   if (!userName && !phoneNo) {
-    throw new ApiError(400, "username or phone No is required")
+    throw new ApiError(400, "username or phone No is required");
   }
-
 
   const traveler = await Traveler.findOne({
-    $or: [{ userName }, { phoneNo }]
-  })
+    $or: [{ userName }, { phoneNo }],
+  });
 
   if (!traveler) {
-    throw new ApiError(404, "Traveler does not exist")
+    throw new ApiError(404, "Traveler does not exist");
   }
 
-  const isPasswordValid = await traveler.isPasswordCorrect(password)
+  const isPasswordValid = await traveler.isPasswordCorrect(password);
 
   if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid Traveler Password")
+    throw new ApiError(401, "Invalid Traveler Password");
   }
 
-  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(traveler._id)
+  // Generate tokens
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    traveler._id
+  );
 
-  const loggedInTraveler = await Traveler.findById(traveler._id).select("-password -refreshToken")
+  // Update last login timestamp
+  traveler.lastLogin = new Date();
+  await traveler.save({ validateBeforeSave: false });
 
+  const loggedInTraveler = await Traveler.findById(traveler._id).select(
+    "-password -refreshToken"
+  );
+
+  // Cookie options
   const options = {
     httpOnly: true,
-    secure: true
-  }
+    secure: true,
+  };
 
   return res
     .status(200)
     .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)
+    .cookie("userType", "Traveler", options)
     .json(
       new ApiResponse(
         200,
-        {
-          traveler: loggedInTraveler, accessToken, refreshToken
-        },
+        { traveler: loggedInTraveler, accessToken, refreshToken },
         "Traveler logged In Successfully"
       )
-    )
-})
-
+    );
+});
 
 // Logout Traveler
 const logoutTraveler = asyncHandler(async (req, res) => {
@@ -125,58 +158,58 @@ const logoutTraveler = asyncHandler(async (req, res) => {
     req.traveler._id,
     {
       $unset: {
-        refreshToken: 1 // this removes the field from document
-      }
+        refreshToken: 1, // this removes the field from document
+      },
     },
     {
-      new: true
+      new: true,
     }
-  )
+  );
 
   const options = {
     httpOnly: true,
-    secure: true
-  }
+    secure: true,
+  };
 
   return res
     .status(200)
     .clearCookie("accessToken", options)
     .clearCookie("refreshToken", options)
-    .json(new ApiResponse(200, {}, "Traveler logged Out"))
-})
-
+    .json(new ApiResponse(200, {}, "Traveler logged Out"));
+});
 
 // Refresh Access Token
 const refreshAccessToken = asyncHandler(async (req, res) => {
-  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+  const incomingRefreshToken =
+    req.cookies.refreshToken || req.body.refreshToken;
 
   if (!incomingRefreshToken) {
-    throw new ApiError(401, "unauthorized request")
+    throw new ApiError(401, "unauthorized request");
   }
 
   try {
     const decodedToken = jwt.verify(
       incomingRefreshToken,
       process.env.REFRESH_TOKEN_SECRET
-    )
+    );
 
-    const traveler = await Traveler.findById(decodedToken?._id)
+    const traveler = await Traveler.findById(decodedToken?._id);
 
     if (!traveler) {
-      throw new ApiError(401, "Invalid refresh token")
+      throw new ApiError(401, "Invalid refresh token");
     }
 
     if (incomingRefreshToken !== traveler?.refreshToken) {
-      throw new ApiError(401, "Refresh token is expired or used")
-
+      throw new ApiError(401, "Refresh token is expired or used");
     }
 
     const options = {
       httpOnly: true,
-      secure: true
-    }
+      secure: true,
+    };
 
-    const { accessToken, newRefreshToken } = await generateAccessAndRefreshTokens(traveler._id)
+    const { accessToken, newRefreshToken } =
+      await generateAccessAndRefreshTokens(traveler._id);
 
     return res
       .status(200)
@@ -188,13 +221,11 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
           { accessToken, refreshToken: newRefreshToken },
           "Access token refreshed"
         )
-      )
+      );
   } catch (error) {
-    throw new ApiError(401, error?.message || "Invalid refresh token")
+    throw new ApiError(401, error?.message || "Invalid refresh token");
   }
-
-})
-
+});
 
 // Change Traveler Password
 const changePassword = asyncHandler(async (req, res) => {
@@ -202,12 +233,18 @@ const changePassword = asyncHandler(async (req, res) => {
 
   // Validate request fields
   if (!oldPassword || !newPassword?.trim() || !confirmNewPassword?.trim()) {
-    throw new ApiError(400, "Old password, new password, and confirmation are required and cannot be empty");
+    throw new ApiError(
+      400,
+      "Old password, new password, and confirmation are required and cannot be empty"
+    );
   }
 
   // Validate new password and confirmation match
   if (newPassword !== confirmNewPassword) {
-    throw new ApiError(400, "New password and confirmation password do not match");
+    throw new ApiError(
+      400,
+      "New password and confirmation password do not match"
+    );
   }
 
   // Fetch the traveler (single DB call)
@@ -224,32 +261,42 @@ const changePassword = asyncHandler(async (req, res) => {
 
   const isNewPasswordSameAsOld = await traveler.isPasswordCorrect(newPassword);
   if (isNewPasswordSameAsOld) {
-    throw new ApiError(400, "New password must be different from the old password");
+    throw new ApiError(
+      400,
+      "New password must be different from the old password"
+    );
   }
 
   // Update and save the new password
   traveler.password = newPassword;
   await traveler.save({ validateBeforeSave: false });
 
-  res.status(200).json(new ApiResponse(200, {}, "Password changed successfully"));
+  res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password changed successfully"));
 });
-
 
 // Get Traveler Profile
 const curruntTravelerProfile = asyncHandler(async (req, res) => {
   return res
     .status(200)
-    .json(new ApiResponse(
-      200,
-      req.traveler,
-      "Traveler fetched successfully"
-    ))
-})
-
+    .json(new ApiResponse(200, req.traveler, "Traveler fetched successfully"));
+});
 
 // Update Traveler Profile Details
 const updateProfileDetails = asyncHandler(async (req, res) => {
-  const { fullName, userName, email, phoneNo, dob, gender, city, state, bio, website } = req.body;
+  const {
+    fullName,
+    userName,
+    email,
+    phoneNo,
+    dob,
+    gender,
+    city,
+    state,
+    bio,
+    website,
+  } = req.body;
 
   // Collect only fields that are provided and have changes
   const updateData = {};
@@ -281,10 +328,7 @@ const updateProfileDetails = asyncHandler(async (req, res) => {
   // Check for duplicate phoneNo or email among other travelers
   if (updateData.phoneNo || updateData.email) {
     const existingTraveler = await Traveler.findOne({
-      $or: [
-        { phoneNo: updateData.phoneNo },
-        { email: updateData.email },
-      ],
+      $or: [{ phoneNo: updateData.phoneNo }, { email: updateData.email }],
       _id: { $ne: req.traveler._id }, // Exclude the current traveler
     });
 
@@ -300,7 +344,7 @@ const updateProfileDetails = asyncHandler(async (req, res) => {
   const traveler = await Traveler.findByIdAndUpdate(
     req.traveler?._id,
     {
-      $set: updateData
+      $set: updateData,
     },
     { new: true, runValidators: true } // schema validation
   ).select("-password -refreshToken");
@@ -313,7 +357,6 @@ const updateProfileDetails = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, traveler, "Profile updated successfully"));
 });
-
 
 // Upload & Update Avatar
 const updateAvatar = asyncHandler(async (req, res) => {
@@ -356,7 +399,6 @@ const updateAvatar = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, updatedTraveler, "Avatar updated successfully"));
 });
 
-
 // Delete Avatar
 const deleteAvatar = asyncHandler(async (req, res) => {
   // Fetch the traveler data
@@ -369,19 +411,19 @@ const deleteAvatar = asyncHandler(async (req, res) => {
   try {
     // Extract Cloudinary public ID from the URL (improved extraction)
     const avatarUrl = traveler.avatar;
-    const parts = avatarUrl.split('/');
+    const parts = avatarUrl.split("/");
 
     if (parts.length < 8) {
       throw new ApiError(400, "Invalid avatar URL format");
     }
 
-    const publicId = parts[7].split('.')[0]; // Extract the public ID (this works for Cloudinary URLs)
+    const publicId = parts[7].split(".")[0]; // Extract the public ID (this works for Cloudinary URLs)
 
     // Delete the avatar from Cloudinary
     const result = await deleteFromCloudinary(publicId);
 
     // Check if deletion was successful
-    if (!result || result.result !== 'ok') {
+    if (!result || result.result !== "ok") {
       throw new ApiError(400, "Error while deleting Avatar from Cloudinary");
     }
 
@@ -393,11 +435,10 @@ const deleteAvatar = asyncHandler(async (req, res) => {
       .status(200)
       .json(new ApiResponse(200, traveler, "Avatar deleted successfully"));
   } catch (error) {
-    console.error("Error deleting avatar:", error);  // Log the error for debugging
+    console.error("Error deleting avatar:", error); // Log the error for debugging
     throw new ApiError(400, "Error while deleting Avatar from Cloudinary");
   }
 });
-
 
 // Update Cover Image
 const updateCoverImage = asyncHandler(async (req, res) => {
@@ -437,9 +478,10 @@ const updateCoverImage = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, updatedTraveler, "Cover image updated successfully"));
+    .json(
+      new ApiResponse(200, updatedTraveler, "Cover image updated successfully")
+    );
 });
-
 
 // Delete Cover Image
 const deleteCoverImage = asyncHandler(async (req, res) => {
@@ -453,19 +495,19 @@ const deleteCoverImage = asyncHandler(async (req, res) => {
   try {
     // Extract Cloudinary public ID from the URL (improved extraction)
     const coverImageUrl = traveler.coverImage;
-    const parts = coverImageUrl.split('/');
+    const parts = coverImageUrl.split("/");
 
     if (parts.length < 8) {
       throw new ApiError(400, "Invalid avatar URL format");
     }
 
-    const publicId = parts[7].split('.')[0]; // Extract the public ID (this works for Cloudinary URLs)
+    const publicId = parts[7].split(".")[0]; // Extract the public ID (this works for Cloudinary URLs)
 
     // Delete the avatar from Cloudinary
     const result = await deleteFromCloudinary(publicId);
 
     // Check if deletion was successful
-    if (!result || result.result !== 'ok') {
+    if (!result || result.result !== "ok") {
       throw new ApiError(400, "Error while deleting Avatar from Cloudinary");
     }
 
@@ -477,11 +519,10 @@ const deleteCoverImage = asyncHandler(async (req, res) => {
       .status(200)
       .json(new ApiResponse(200, traveler, "Avatar deleted successfully"));
   } catch (error) {
-    console.error("Error deleting avatar:", error);  // Log the error for debugging
+    console.error("Error deleting avatar:", error); // Log the error for debugging
     throw new ApiError(400, "Error while deleting Avatar from Cloudinary");
   }
 });
-
 
 // Toggle Privacy for Traveler
 const togglePrivacy = asyncHandler(async (req, res) => {
@@ -503,7 +544,6 @@ const togglePrivacy = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, { private: traveler.private }, message));
 });
-
 
 // Get User profile
 const getUserProfile = asyncHandler(async (req, res) => {
@@ -533,12 +573,12 @@ const getUserProfile = asyncHandler(async (req, res) => {
         $or: [
           {
             "follower.userId": user._id,
-            "follower.userType": userType
+            "follower.userType": userType,
           },
           {
             "following.userId": user._id,
-            "following.userType": userType
-          }
+            "following.userType": userType,
+          },
         ],
       },
     },
@@ -548,7 +588,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
           {
             $match: {
               "following.userId": user._id,
-              "following.userType": userType
+              "following.userType": userType,
             },
           },
           {
@@ -582,7 +622,10 @@ const getUserProfile = asyncHandler(async (req, res) => {
         ],
         followings: [
           {
-            $match: { "follower.userId": user._id, "follower.userType": userType },
+            $match: {
+              "follower.userId": user._id,
+              "follower.userType": userType,
+            },
           },
           {
             $lookup: {
@@ -666,8 +709,8 @@ const getUserProfile = asyncHandler(async (req, res) => {
       bio: user.bio,
       website: user.website,
       address: user.address,
-      posts: user.posts || [], 
-      tweets: user.tweets || [], 
+      posts: user.posts || [],
+      tweets: user.tweets || [],
       packages: user.packages || [],
       followers: userProfile[0]?.followers || [],
       followings: userProfile[0]?.followings || [],
@@ -676,14 +719,14 @@ const getUserProfile = asyncHandler(async (req, res) => {
     };
   }
 
-  return res.status(200).json(
-    new ApiResponse(200, profileData, "User profile fetched successfully")
-  );
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, profileData, "User profile fetched successfully")
+    );
 });
 
-
 export {
-
   registerTraveler,
   loginTraveler,
   logoutTraveler,
@@ -696,6 +739,5 @@ export {
   updateCoverImage,
   deleteCoverImage,
   togglePrivacy,
-  getUserProfile
-
-}
+  getUserProfile,
+};

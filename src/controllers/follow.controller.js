@@ -55,7 +55,7 @@ const toggleFollow = asyncHandler(async (req, res) => {
             following: { userId: user._id, userType: userType },
         });
 
-        // Ensure we get the correct name or agency name for the sender
+        // Ensure get the correct name or agency name for the sender
         const senderName = req.traveler ? req.traveler.userName : req.agency?.userName;
         
         if (!senderName) {
@@ -69,14 +69,13 @@ const toggleFollow = asyncHandler(async (req, res) => {
             sender: { userId: currentUserId, userType: currentUserType },
             type: "FOLLOW",
             message: notificationMessage,
-            relatedEntity: followEntity._id,            // Set relatedEntity to the follow entity's ID
-            relatedEntityType: "follow",                // Type is "Follow"
+            relatedEntity: followEntity._id,            
+            relatedEntityType: "follow",                
         });
 
         return res.status(200).json(new ApiResponse(200, {}, "User followed successfully"));
     }
 });
-
 
 
 // get user followers 
@@ -96,7 +95,7 @@ const getUserFollower = asyncHandler(async (req, res) => {
         throw new ApiError(404, "User not found");
     }
 
-    // Use aggregation pipeline to fetch followers with specific fields
+    // fetch followers with specific fields
     const followers = await FollowerFollowing.aggregate([
         {
             $match: {
@@ -167,7 +166,7 @@ const getUserFollowing = asyncHandler(async (req, res) => {
         throw new ApiError(404, "User not found");
     }
 
-    // Use aggregation pipeline to fetch followings with specific fields
+    // fetch followings with specific fields
     const followings = await FollowerFollowing.aggregate([
         {
             $match: {

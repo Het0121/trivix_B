@@ -110,7 +110,7 @@ const getBooking = asyncHandler(async (req, res) => {
     }
 
     const booking = await Booking.aggregate([
-        { $match: { _id: new mongoose.Types.ObjectId(bookingId) } }, // Use `new` keyword here
+        { $match: { _id: new mongoose.Types.ObjectId(bookingId) } }, 
         {
             $lookup: {
                 from: "travelers",
@@ -144,7 +144,6 @@ const getBooking = asyncHandler(async (req, res) => {
 
     res.status(200).json(new ApiResponse(200, booking[0], "Booking retrieved successfully."));
 });
-
 
 
 // Remove Traveler's Booking

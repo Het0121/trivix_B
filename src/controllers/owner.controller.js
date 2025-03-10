@@ -44,7 +44,7 @@ const createOwner = asyncHandler(async (req, res) => {
         gender,
         dob,
         avatar: avatar?.url || "",
-        agency: req.agency._id, // Set agencyId from the authenticated agency
+        agency: req.agency._id, 
     });
 
     return res.status(201).json(new ApiResponse(201, owner, "Owner created successfully"));
@@ -53,18 +53,18 @@ const createOwner = asyncHandler(async (req, res) => {
 
 // Get all owners with agency details
 const getAllOwnersWithAgencyDetails = asyncHandler(async (req, res) => {
-    const agencyId = req.agency._id; // Assuming the agency is accessible from req.agency
+    const agencyId = req.agency._id; 
 
     const owners = await Owner.aggregate([
         {
             $match: {
-                agency: agencyId, // Ensure the owners belong to the current agency
+                agency: agencyId,
             },
         },
         {
             $lookup: {
-                from: "agencies", // Join the 'agencies' collection
-                localField: "agency", // Assuming 'agency' is a field in the owner model
+                from: "agencies",
+                localField: "agency",
                 foreignField: "_id",
                 as: "agencyDetails",
             },
@@ -144,7 +144,7 @@ const updateOwner = asyncHandler(async (req, res) => {
 // Update owner avatar
 const updateAvatar = asyncHandler(async (req, res) => {
     const { ownerId } = req.params;
-    const agencyId = req.agency._id; // Ensure we have the agency ID from the authenticated request
+    const agencyId = req.agency._id; 
 
     // Check if the owner exists and is associated with the current agency
     const owner = await Owner.findOne({ _id: ownerId, agency: agencyId });
@@ -159,14 +159,14 @@ const updateAvatar = asyncHandler(async (req, res) => {
 
     // Delete the old avatar if it exists
     if (owner.avatar) {
-        const publicId = owner.avatar.split("/").pop().split(".")[0]; // Extract the public ID of the old avatar
+        const publicId = owner.avatar.split("/").pop().split(".")[0]; 
         await deleteFromCloudinary(publicId);
     }
 
     // Upload the new avatar
     const avatar = await uploadOnCloudinary(req.file.path);
 
-    // Update the owner with the new avatar URL
+   
     owner.avatar = avatar.url;
     await owner.save();
 
@@ -192,6 +192,7 @@ const deleteOwner = asyncHandler(async (req, res) => {
 
     return res.status(200).json(new ApiResponse(200, null, "Owner deleted successfully"));
 });
+
 
 export {
     ensureAgency,
