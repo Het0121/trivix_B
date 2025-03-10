@@ -6,7 +6,7 @@ import {
   logoutAgency,
   refreshAccessToken,
   changePassword,
-  curruntAgencyProfile,
+  currentAgencyProfile,  
   updateProfileDetails,
   updateAvatar,
   deleteAvatar,
@@ -34,7 +34,7 @@ router.route("/logout").post(verifyAgencyJWT, logoutAgency)
 router.route("/refreshToken").post(refreshAccessToken)
 
 // Get Agency Profile
-router.route("/currentAgency").get(verifyAgencyJWT, curruntAgencyProfile)
+router.route("/currentAgency").get(verifyAgencyJWT, currentAgencyProfile)
 
 // Update Agency Profile
 router.route("/updateProfile").patch(verifyAgencyJWT, updateProfileDetails)

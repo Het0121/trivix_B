@@ -1,105 +1,115 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiError } from "../utils/ApiError.js"
-import { Agency } from "../models/agency.model.js"
-import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js"
+import { ApiError } from "../utils/ApiError.js";
+import { Agency } from "../models/agency.model.js";
+import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 
 // Generate Access And Refresh Token
 const generateAccessAndRefreshTokens = async (agencyId) => {
   try {
-    const agency = await Agency.findById(agencyId)
-    const accessToken = agency.generateAccessToken()
-    const refreshToken = agency.generateRefreshToken()
+    const agency = await Agency.findById(agencyId);
+    if (!agency) {
+      throw new ApiError(404, "Agency not found");
+    }
 
-    agency.refreshToken = refreshToken
-    await agency.save({ validateBeforeSave: false })
+    const accessToken = agency.generateAccessToken();
+    const refreshToken = agency.generateRefreshToken();
 
-    return { accessToken, refreshToken }
+    agency.refreshToken = refreshToken;
+    await agency.save({ validateBeforeSave: false });
 
-
+    return { accessToken, refreshToken };
   } catch (error) {
-    throw new ApiError(500, "Something went wrong while generating refresh and access token")
+    throw new ApiError(500, "Something went wrong while generating refresh and access token");
   }
-}
-
+};
 
 // Register Agency
 const registerAgency = asyncHandler(async (req, res) => {
+  const { agencyName, userName, email, agencyPhoneNo, password } = req.body;
 
-  const { agencyName, userName, email, agencyPhoneNo, password } = req.body
-
-  if (
-    [agencyName, userName, email, agencyPhoneNo, password].some((field) => field?.trim() === "")
-  ) {
-    throw new ApiError(400, "All fields are required")
+  // Validate required fields
+  if ([agencyName, userName, email, agencyPhoneNo, password].some((field) => !field?.trim())) {
+    throw new ApiError(400, "All fields are required");
   }
 
+  // Check if agency already exists
   const existedAgency = await Agency.findOne({
-    $or: [{ userName }, { agencyPhoneNo }, { email }]
-  })
+    $or: [
+      { userName: userName.toLowerCase() }, 
+      { agencyPhoneNo }, 
+      { email: email.toLowerCase() }
+    ]
+  });
 
   if (existedAgency) {
-    throw new ApiError(409, "Agency with Phone No or username or Email already exists")
+    throw new ApiError(409, "Agency with Phone No, username, or Email already exists");
   }
 
-
+  // Create new agency
   const agency = await Agency.create({
     agencyName,
     userName: userName.toLowerCase(),
-    email : email.toLowerCase(),
+    email: email.toLowerCase(),
     agencyPhoneNo,
     password
-  })
+  });
 
-  const createdAgency = await Agency.findById(agency._id).select(
-    "-password -refreshToken"
-  )
+  const createdAgency = await Agency.findById(agency._id).select("-password -refreshToken");
 
   if (!createdAgency) {
-    throw new ApiError(500, "Something went wrong while registering the Agency")
+    throw new ApiError(500, "Something went wrong while registering the Agency");
   }
 
   return res.status(201).json(
     new ApiResponse(200, createdAgency, "Agency registered Successfully")
-  )
-
-})
-
+  );
+});
 
 // Login Agency
 const loginAgency = asyncHandler(async (req, res) => {
+  const { userName, agencyPhoneNo, password } = req.body;
 
-  const { userName, phoneNo, password } = req.body
-
-
-  if (!userName && !phoneNo) {
-    throw new ApiError(400, "username or phone No is required")
+  // Validate at least one identifier is provided
+  if (!userName && !agencyPhoneNo) {
+    throw new ApiError(400, "Username or phone number is required");
   }
 
+  // Validate password is provided
+  if (!password) {
+    throw new ApiError(400, "Password is required");
+  }
 
+  // Find agency by username or phone number
   const agency = await Agency.findOne({
-    $or: [{ userName }, { phoneNo }]
-  })
+    $or: [{ userName }, { agencyPhoneNo }]
+  });
 
   if (!agency) {
-    throw new ApiError(404, "Agency does not exist")
+    throw new ApiError(404, "Agency does not exist");
   }
 
-  const isPasswordValid = await agency.isPasswordCorrect(password)
+  // Validate password
+  const isPasswordValid = await agency.isPasswordCorrect(password);
 
   if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid Agency Password")
+    throw new ApiError(401, "Invalid Agency Password");
   }
 
-  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(agency._id)
+  // Generate tokens
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(agency._id);
 
-  const loggedInAgency = await Agency.findById(agency._id).select("-password -refreshToken")
+  // Update last login timestamp
+  agency.lastLogin = new Date();
+  await agency.save({ validateBeforeSave: false });
+
+  const loggedInAgency = await Agency.findById(agency._id).select("-password -refreshToken");
 
   const options = {
     httpOnly: true,
     secure: true
-  }
+  };
 
   return res
     .status(200)
@@ -109,13 +119,12 @@ const loginAgency = asyncHandler(async (req, res) => {
       new ApiResponse(
         200,
         {
-          agency : loggedInAgency, accessToken, refreshToken
+          agency: loggedInAgency, accessToken, refreshToken
         },
         "Agency logged In Successfully"
       )
-    )
-})
-
+    );
+});
 
 // Logout Agency
 const logoutAgency = asyncHandler(async (req, res) => {
@@ -129,52 +138,50 @@ const logoutAgency = asyncHandler(async (req, res) => {
     {
       new: true
     }
-  )
+  );
 
   const options = {
     httpOnly: true,
     secure: true
-  }
+  };
 
   return res
     .status(200)
     .clearCookie("accessToken", options)
     .clearCookie("refreshToken", options)
-    .json(new ApiResponse(200, {}, "Agency logged Out"))
-})
-
+    .json(new ApiResponse(200, {}, "Agency logged Out"));
+});
 
 // Refresh Access Token
 const refreshAccessToken = asyncHandler(async (req, res) => {
-  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
   if (!incomingRefreshToken) {
-    throw new ApiError(401, "unauthorized request")
+    throw new ApiError(401, "Unauthorized request");
   }
 
   try {
     const decodedToken = jwt.verify(
       incomingRefreshToken,
       process.env.REFRESH_TOKEN_SECRET
-    )
+    );
 
-    const agency = await Agency.findById(decodedToken?._id)
+    const agency = await Agency.findById(decodedToken?._id);
 
     if (!agency) {
-      throw new ApiError(401, "Invalid refresh token")
+      throw new ApiError(401, "Invalid refresh token");
     }
 
     if (incomingRefreshToken !== agency?.refreshToken) {
-      throw new ApiError(401, "Refresh token is expired or used")
-
+      throw new ApiError(401, "Refresh token is expired or used");
     }
 
     const options = {
       httpOnly: true,
       secure: true
-    }
+    };
 
-    const { accessToken, newRefreshToken } = await generateAccessAndRefreshTokens(agency._id)
+    const { accessToken, refreshToken: newRefreshToken } = await generateAccessAndRefreshTokens(agency._id);
 
     return res
       .status(200)
@@ -186,13 +193,11 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
           { accessToken, refreshToken: newRefreshToken },
           "Access token refreshed"
         )
-      )
+      );
   } catch (error) {
-    throw new ApiError(401, error?.message || "Invalid refresh token")
+    throw new ApiError(401, error?.message || "Invalid refresh token");
   }
-
-})
-
+});
 
 // Change Agency Password
 const changePassword = asyncHandler(async (req, res) => {
@@ -229,21 +234,21 @@ const changePassword = asyncHandler(async (req, res) => {
   agency.password = newPassword;
   await agency.save({ validateBeforeSave: false });
 
-  res.status(200).json(new ApiResponse(200, {}, "Password changed successfully"));
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password changed successfully"));
 });
 
-
 // Get Agency Profile
-const curruntAgencyProfile = asyncHandler(async (req, res) => {
+const currentAgencyProfile = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(
       200,
       req.agency,
       "Agency fetched successfully"
-    ))
-})
-
+    ));
+});
 
 // Update Agency Profile Details
 const updateProfileDetails = asyncHandler(async (req, res) => {
@@ -253,20 +258,20 @@ const updateProfileDetails = asyncHandler(async (req, res) => {
   const updateData = {};
 
   if (agencyName) updateData.agencyName = agencyName;
-  if (userName) updateData.userName = userName;
+  if (userName) updateData.userName = userName.toLowerCase();
   if (agencyPhoneNo) updateData.agencyPhoneNo = agencyPhoneNo;
   if (email) {
     // Validate email format
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new ApiError(400, "Invalid email format");
     }
-    updateData.email = email;
+    updateData.email = email.toLowerCase();
   }
-  if (bio) updateData.bio = bio;
-  if (city) updateData.city = city;
-  if (state) updateData.state = state;
-  if (website) updateData.website = website;
-  if (address) updateData.address = address;
+  if (bio !== undefined) updateData.bio = bio;
+  if (city !== undefined) updateData.city = city;
+  if (state !== undefined) updateData.state = state;
+  if (website !== undefined) updateData.website = website;
+  if (address !== undefined) updateData.address = address;
 
   // Check if there are any fields to update
   if (Object.keys(updateData).length === 0) {
@@ -275,21 +280,26 @@ const updateProfileDetails = asyncHandler(async (req, res) => {
       .json(new ApiResponse(400, {}, "No updates provided"));
   }
 
-  // Check for duplicate phoneNo or email among other agency
-  if (updateData.agencyPhoneNo || updateData.email) {
-    const existingAgency = await Agency.findOne({
-      $or: [
-        { agencyPhoneNo : updateData.agencyPhoneNo },
-        { email : updateData.email },
-      ],
+  // Check for duplicate phoneNo, username or email among other agencies
+  if (updateData.agencyPhoneNo || updateData.email || updateData.userName) {
+    const duplicateCheckQuery = {
+      $or: [],
       _id: { $ne: req.agency._id }, // Exclude the current agency
-    });
+    };
+    
+    if (updateData.agencyPhoneNo) duplicateCheckQuery.$or.push({ agencyPhoneNo: updateData.agencyPhoneNo });
+    if (updateData.email) duplicateCheckQuery.$or.push({ email: updateData.email });
+    if (updateData.userName) duplicateCheckQuery.$or.push({ userName: updateData.userName });
+    
+    if (duplicateCheckQuery.$or.length > 0) {
+      const existingAgency = await Agency.findOne(duplicateCheckQuery);
 
-    if (existingAgency) {
-      throw new ApiError(
-        409,
-        "Phone number or email already in use by another agency"
-      );
+      if (existingAgency) {
+        throw new ApiError(
+          409,
+          "Phone number, username, or email already in use by another agency"
+        );
+      }
     }
   }
 
@@ -303,7 +313,7 @@ const updateProfileDetails = asyncHandler(async (req, res) => {
   ).select("-password -refreshToken");
 
   if (!agency) {
-    throw new ApiError(404, "agency not found");
+    throw new ApiError(404, "Agency not found");
   }
 
   return res
@@ -311,6 +321,23 @@ const updateProfileDetails = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, agency, "Profile updated successfully"));
 });
 
+// Helper function to extract public ID from Cloudinary URL
+const extractCloudinaryPublicId = (url) => {
+  if (!url || url === "defaultImg.jpg") {
+    return null;
+  }
+  
+  try {
+    const parts = url.split('/');
+    if (parts.length < 8) {
+      return null;
+    }
+    return parts[7].split('.')[0]; // Extract the public ID
+  } catch (error) {
+    console.error("Error extracting Cloudinary public ID:", error);
+    return null;
+  }
+};
 
 // Upload & Update Avatar
 const updateAvatar = asyncHandler(async (req, res) => {
@@ -322,12 +349,19 @@ const updateAvatar = asyncHandler(async (req, res) => {
 
   // Fetch agency data
   const agency = await Agency.findById(req.agency?._id);
+  if (!agency) {
+    throw new ApiError(404, "Agency not found");
+  }
 
-  // Check if Agency has an existing avatar
-  if (agency?.avatar) {
-    // Delete the old avatar from Cloudinary
-    const publicId = agency.avatar.split("/").pop().split(".")[0]; // Extract public ID from URL
-    await deleteFromCloudinary(publicId); // Delete the old avatar
+  // Check if Agency has an existing avatar to delete
+  const publicId = extractCloudinaryPublicId(agency.avatar);
+  if (publicId) {
+    try {
+      await deleteFromCloudinary(publicId);
+    } catch (error) {
+      console.error("Error deleting old avatar:", error);
+      // Continue with upload even if deletion fails
+    }
   }
 
   // Upload the new avatar
@@ -353,48 +387,45 @@ const updateAvatar = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, updatedAgency, "Avatar updated successfully"));
 });
 
-
 // Delete Avatar
 const deleteAvatar = asyncHandler(async (req, res) => {
   // Fetch the Agency data
   const agency = await Agency.findById(req.agency?._id);
+  if (!agency) {
+    throw new ApiError(404, "Agency not found");
+  }
 
-  if (!agency || !agency.avatar) {
-    throw new ApiError(404, "No cover image to delete");
+  if (agency.avatar === "defaultImg.jpg") {
+    throw new ApiError(400, "No avatar to delete - already using default image");
+  }
+
+  // Extract Cloudinary public ID from the URL
+  const publicId = extractCloudinaryPublicId(agency.avatar);
+  if (!publicId) {
+    throw new ApiError(400, "Invalid avatar URL format");
   }
 
   try {
-    // Extract Cloudinary public ID from the URL (improved extraction)
-    const avatarUrl = agency.avatar;
-    const parts = avatarUrl.split('/');
-
-    if (parts.length < 8) {
-      throw new ApiError(400, "Invalid avatar URL format");
-    }
-
-    const publicId = parts[7].split('.')[0]; // Extract the public ID (this works for Cloudinary URLs)
-
     // Delete the avatar from Cloudinary
     const result = await deleteFromCloudinary(publicId);
 
     // Check if deletion was successful
     if (!result || result.result !== 'ok') {
-      throw new ApiError(400, "Error while deleting Avatar from Cloudinary");
+      throw new ApiError(400, "Error while deleting avatar from Cloudinary");
     }
 
-    // Set the avatar field to an empty string
+    // Reset the avatar field to default
     agency.avatar = "defaultImg.jpg";
-    await agency.save();
+    await agency.save({ validateBeforeSave: false });
 
     return res
       .status(200)
       .json(new ApiResponse(200, agency, "Avatar deleted successfully"));
   } catch (error) {
-    console.error("Error deleting avatar:", error);  // Log the error for debugging
-    throw new ApiError(400, "Error while deleting Avatar from Cloudinary");
+    console.error("Error deleting avatar:", error);
+    throw new ApiError(400, "Error while deleting avatar: " + (error.message || "Unknown error"));
   }
 });
-
 
 // Update Cover Image
 const updateCoverImage = asyncHandler(async (req, res) => {
@@ -406,12 +437,19 @@ const updateCoverImage = asyncHandler(async (req, res) => {
 
   // Fetch agency data
   const agency = await Agency.findById(req.agency?._id);
+  if (!agency) {
+    throw new ApiError(404, "Agency not found");
+  }
 
-  // Check if agency has an existing cover image
-  if (agency?.coverImage) {
-    // Delete the old cover image from Cloudinary
-    const publicId = agency.coverImage.split("/").pop().split(".")[0]; // Extract public ID from URL
-    await deleteFromCloudinary(publicId); // Delete the old cover image
+  // Check if agency has an existing cover image to delete
+  const publicId = extractCloudinaryPublicId(agency.coverImage);
+  if (publicId) {
+    try {
+      await deleteFromCloudinary(publicId);
+    } catch (error) {
+      console.error("Error deleting old cover image:", error);
+      // Continue with upload even if deletion fails
+    }
   }
 
   // Upload the new cover image
@@ -437,61 +475,56 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, updatedAgency, "Cover image updated successfully"));
 });
 
-
 // Delete Cover Image
 const deleteCoverImage = asyncHandler(async (req, res) => {
   // Fetch the agency data
   const agency = await Agency.findById(req.agency?._id);
+  if (!agency) {
+    throw new ApiError(404, "Agency not found");
+  }
 
-  if (!agency || !agency.coverImage) {
-    throw new ApiError(404, "No cover image to delete");
+  if (agency.coverImage === "defaultImg.jpg") {
+    throw new ApiError(400, "No cover image to delete - already using default image");
+  }
+
+  // Extract Cloudinary public ID from the URL
+  const publicId = extractCloudinaryPublicId(agency.coverImage);
+  if (!publicId) {
+    throw new ApiError(400, "Invalid cover image URL format");
   }
 
   try {
-    // Extract Cloudinary public ID from the URL (improved extraction)
-    const coverImageUrl = agency.coverImage;
-    const parts = coverImageUrl.split('/');
-
-    if (parts.length < 8) {
-      throw new ApiError(400, "Invalid avatar URL format");
-    }
-
-    const publicId = parts[7].split('.')[0]; // Extract the public ID (this works for Cloudinary URLs)
-
-    // Delete the avatar from Cloudinary
+    // Delete the cover image from Cloudinary
     const result = await deleteFromCloudinary(publicId);
 
     // Check if deletion was successful
     if (!result || result.result !== 'ok') {
-      throw new ApiError(400, "Error while deleting Avatar from Cloudinary");
+      throw new ApiError(400, "Error while deleting cover image from Cloudinary");
     }
 
-    // Set the avatar field to an empty string
+    // Reset the cover image field to default
     agency.coverImage = "defaultImg.jpg";
-    await agency.save();
+    await agency.save({ validateBeforeSave: false });
 
     return res
       .status(200)
-      .json(new ApiResponse(200, agency, "Avatar deleted successfully"));
+      .json(new ApiResponse(200, agency, "Cover image deleted successfully"));
   } catch (error) {
-    console.error("Error deleting avatar:", error);  // Log the error for debugging
-    throw new ApiError(400, "Error while deleting Avatar from Cloudinary");
+    console.error("Error deleting cover image:", error);
+    throw new ApiError(400, "Error while deleting cover image: " + (error.message || "Unknown error"));
   }
 });
 
-
 export {
-
-    registerAgency,
-    loginAgency,
-    logoutAgency,
-    refreshAccessToken,
-    changePassword,
-    curruntAgencyProfile,
-    updateProfileDetails,
-    updateAvatar,
-    deleteAvatar,
-    updateCoverImage,
-    deleteCoverImage,
-
-  }
+  registerAgency,
+  loginAgency,
+  logoutAgency,
+  refreshAccessToken,
+  changePassword,
+  currentAgencyProfile,  
+  updateProfileDetails,
+  updateAvatar,
+  deleteAvatar,
+  updateCoverImage,
+  deleteCoverImage,
+};
