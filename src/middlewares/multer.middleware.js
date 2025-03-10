@@ -4,10 +4,12 @@ import multer from "multer";
 // Configure Multer disk storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "./public/temp"); 
+    cb(null, "./public/temp"); // Ensure this directory exists
   },
   filename: function (req, file, cb) {
-    cb(null, file.originalname);
+    const ext = file.mimetype.split("/")[1]; // Get file extension
+    const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9) + "." + ext;
+    cb(null, uniqueName);
   },
 });
 
