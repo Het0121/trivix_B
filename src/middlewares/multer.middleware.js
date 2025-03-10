@@ -4,10 +4,10 @@ import multer from "multer";
 // Configure Multer disk storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "./public/temp"); // Set the temporary directory for uploads
+    cb(null, "./public/temp"); 
   },
   filename: function (req, file, cb) {
-    cb(null, file.originalname); // Use the original file name
+    cb(null, file.originalname);
   },
 });
 
@@ -25,7 +25,6 @@ const allowedFileTypes = [
 ];
 
 
-// Add file size limit (10MB) and file type restriction
 export const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB file size limit
